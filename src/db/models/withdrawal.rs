@@ -1,39 +1,35 @@
+use alloy::rpc::types::Withdrawal;
 use clickhouse::Row;
-use ethers::types::Withdrawal;
-use primitive_types::U256;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-
-use crate::utils::format::{format_address, SerU256};
 
 #[serde_as]
 #[derive(Debug, Clone, Row, Serialize, Deserialize)]
 pub struct DatabaseWithdrawal {
     pub address: String,
-    #[serde_as(as = "SerU256")]
-    pub amount: U256,
-    pub block_number: u32,
+    pub amount: u64,
+    pub block_number: u64,
     pub chain: u64,
-    pub timestamp: u32,
-    pub validator_index: u32,
-    pub withdrawal_index: u32,
+    pub timestamp: u64,
+    pub validator_index: u64,
+    pub withdrawal_index: u64,
 }
 
 impl DatabaseWithdrawal {
     pub fn from_rpc(
         withdrawal: &Withdrawal,
         chain: u64,
-        block_number: u32,
-        timestamp: u32,
+        block_number: u64,
+        timestamp: u64,
     ) -> Self {
         Self {
-            address: format_address(withdrawal.address),
+            address: withdrawal.address.to_string(),
             amount: withdrawal.amount,
             block_number,
             chain,
             timestamp,
-            validator_index: withdrawal.validator_index.as_usize() as u32,
-            withdrawal_index: withdrawal.index.as_usize() as u32,
+            validator_index: withdrawal.validator_index,
+            withdrawal_index: withdrawal.index,
         }
     }
 }

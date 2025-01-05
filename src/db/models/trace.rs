@@ -1,6 +1,5 @@
+use alloy::{primitives::U256, rpc::types::trace::common::TraceResult};
 use clickhouse::Row;
-use ethers::types::Trace;
-use primitive_types::U256;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
@@ -46,7 +45,7 @@ pub struct DatabaseTrace {
     #[serde_as(as = "Option<SerU256>")]
     pub balance: Option<U256>,
     pub block_hash: String,
-    pub block_number: u32,
+    pub block_number: u64,
     pub call_type: Option<CallType>,
     pub chain: u64,
     pub code: Option<String>,
@@ -69,7 +68,7 @@ pub struct DatabaseTrace {
 }
 
 impl DatabaseTrace {
-    pub fn from_rpc(trace: &Trace, chain: u64) -> Self {
+    pub fn from_rpc(trace: &TraceResult, chain: u64) -> Self {
         let trace_address = trace
             .trace_address
             .clone()

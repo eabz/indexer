@@ -1,6 +1,5 @@
+use alloy::primitives::U256;
 use clickhouse::Row;
-use ethers::abi::{ethabi, ParamType};
-use primitive_types::{H256, U256};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 

@@ -21,16 +21,15 @@ use crate::{
             ERC1155_TRANSFER_SINGLE_EVENT_SIGNATURE,
             TRANSFER_EVENTS_SIGNATURE,
         },
-        format::{decode_bytes, format_hash},
+        format::{decode_bytes, format_u256},
     },
 };
-use ethabi::ParamType;
-use ethers::{
-    abi::ethabi,
-    types::{Block, Trace, Transaction, TransactionReceipt, TxHash},
+use alloy::{
+    primitives::U256,
+    rpc::types::{Block, Transaction, TransactionReceipt},
 };
-use primitive_types::U256;
 
+use alloy_dyn_abi::DynSolType;
 use jsonrpsee::{
     core::{
         client::{ClientT, Subscription, SubscriptionClientT},
@@ -86,7 +85,7 @@ impl Rpc {
                             Err(_) => continue,
                         };
 
-                    if chain_id.as_u64() != config.chain.id {
+                    if format_u256(chain_id) != config.chain.id {
                         continue;
                     }
 
@@ -123,7 +122,7 @@ impl Rpc {
                         "Unable to deserialize eth_blockNumber response",
                     );
 
-                block_number.as_usize() as u32
+                format_u256(block_number) as u32
             }
             Err(_) => 0,
         }
@@ -131,7 +130,7 @@ impl Rpc {
 
     pub async fn fetch_block(
         &self,
-        block_number: &u32,
+        block_number: &u64,
         chain: &Chain,
     ) -> Option<(
         Vec<DatabaseBlock>,
@@ -195,7 +194,7 @@ impl Rpc {
                         Some((receipts, mut logs, contracts)) => {
                             for receipt in receipts {
                                 db_receipts.insert(
-                                    format_hash(receipt.transaction_hash),
+                                    receipt.transaction_hash.to_string(),
                                     receipt,
                                 );
                             }
@@ -222,7 +221,7 @@ impl Rpc {
                         match receipt_data {
                             Some((receipt, mut logs, contract)) => {
                                 db_receipts.insert(
-                                    format_hash(receipt.transaction_hash),
+                                    receipt.transaction_hash.to_string(),
                                     receipt,
                                 );
                                 db_logs.append(&mut logs);
@@ -345,6 +344,9 @@ impl Rpc {
                     {
                         let log_data = decode_bytes(log.data.clone());
 
+                        let my_type: DynSolType =
+                            "uint16[2][]".parse().unwrap();
+
                         let transfer_values = ethabi::decode(
                             &[ParamType::Uint(256), ParamType::Uint(256)],
                             &log_data[..],
@@ -465,7 +467,7 @@ impl Rpc {
                     }
                 };
 
-                if chain_id.as_u64() != self.chain.id {
+                if format_u256(chain_id) != self.chain.id {
                     panic!("websocket chain id doesn't match with configured chain id")
                 }
             }
@@ -490,8 +492,7 @@ impl Rpc {
                 let db = db.clone();
                 let block = block.unwrap().clone();
                 async move {
-                    let block_number =
-                        block.number.unwrap().as_usize() as u32;
+                    let block_number = block.header.number;
 
                     info!("New head found {}.", block_number.clone());
 
@@ -563,7 +564,7 @@ impl Rpc {
 
     async fn get_block(
         &self,
-        block_number: &u32,
+        block_number: &u64,
     ) -> Option<(
         DatabaseBlock,
         Vec<DatabaseTransaction>,
@@ -594,7 +595,7 @@ impl Rpc {
 
                         let mut db_transactions = Vec::new();
 
-                        for transaction in block.transactions.iter() {
+                        for transaction in block.transactions.txns() {
                             let db_transaction =
                                 DatabaseTransaction::from_rpc(
                                     transaction,
@@ -680,7 +681,7 @@ impl Rpc {
 
     async fn get_block_traces(
         &self,
-        block_number: &u32,
+        block_number: &u64,
     ) -> Vec<DatabaseTrace> {
         let client = self.get_client();
 
@@ -721,8 +722,8 @@ impl Rpc {
     async fn get_transaction_receipt(
         &self,
         transaction: String,
-        transaction_timestamp: u32,
-        block_number: &u32,
+        transaction_timestamp: u64,
+        block_number: &u64,
     ) -> Option<(
         TransactionReceipt,
         Vec<DatabaseLog>,
@@ -744,19 +745,10 @@ impl Rpc {
                         let mut db_transaction_logs: Vec<DatabaseLog> =
                             Vec::new();
 
-                        let status: bool = match receipt.status {
-                            None => true,
-                            Some(status) => {
-                                let status_number = status.as_u64() as i64;
-
-                                status_number != 0
-                            }
-                        };
-
                         let mut db_contract: Option<DatabaseContract> =
                             None;
 
-                        if status {
+                        if receipt.status() {
                             db_contract =
                                 receipt.contract_address.map(|_| {
                                     DatabaseContract::from_rpc(
@@ -766,7 +758,7 @@ impl Rpc {
                                 });
                         }
 
-                        for log in receipt.logs.iter() {
+                        for log in receipt.inner.logs() {
                             let db_log = DatabaseLog::from_rpc(
                                 log,
                                 self.chain.id,
@@ -788,8 +780,8 @@ impl Rpc {
 
     async fn get_block_receipts(
         &self,
-        block_number: &u32,
-        block_timestamp: u32,
+        block_number: &u64,
+        block_timestamp: u64,
     ) -> Option<(
         Vec<TransactionReceipt>,
         Vec<DatabaseLog>,
@@ -836,7 +828,7 @@ impl Rpc {
                                 false => (),
                             }
 
-                            for log in receipt.logs.iter() {
+                            for log in receipt.inner.logs() {
                                 let db_log = DatabaseLog::from_rpc(
                                     log,
                                     self.chain.id,
